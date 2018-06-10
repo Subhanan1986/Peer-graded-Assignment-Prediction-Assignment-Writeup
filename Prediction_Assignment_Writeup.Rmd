@@ -1,0 +1,125 @@
+---
+title: 'Peer-graded Assignment: Prediction Assignment Writeup'
+author: "Subhanan Ganguli"
+date: "10 June 2018"
+output:
+  html_document: default
+  word_document: default
+  pdf_document: default
+---
+
+## Background
+Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively. These type of devices are part of the quantified self movement - a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks. One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. In this project, your goal will be to use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. They were asked to perform barbell lifts correctly and incorrectly in 5 different ways. More information is available from the website here: http://web.archive.org/web/20161224072740/http:/groupware.les.inf.puc-rio.br/har (see the section on the Weight Lifting Exercise Dataset).
+
+## Exploratory Data Analysis
+ * Load Required library
+```{r,cache=TRUE, echo=TRUE, results='hide'}
+library(ggplot2)
+library(caret)
+library(rpart)
+library(randomForest)
+library(rpart.plot)
+library(rattle)
+library(gbm)
+library(e1071)
+set.seed(301)
+```
+
+* Data loading and processing
+```{r,cache=TRUE,echo=TRUE, results="hide"}
+Train_Url <- "https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv"
+Test_Url <- "https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv"
+download.file(Train_Url, destfile = "pml-training.csv")
+download.file(Test_Url,destfile = "pml-testing.csv")
+Train_Raw_data <- read.csv("pml-training.csv")
+Test_Raw_Data <- read.csv("pml-testing.csv")
+dim (Train_Raw_data)
+dim(Test_Raw_Data)
+```
+
+"classe" Column is not in Test Data.
+
+```{r,cache=TRUE,echo=TRUE}
+col_name <- colnames(Train_Raw_data)== colnames(Test_Raw_Data)
+colnames(Train_Raw_data) [col_name==FALSE]
+```
+
+* Create Partition form Training Data to train a model and Predict classe from Test data. 
+
+```{r,cache=TRUE,echo=TRUE}
+intrain <- createDataPartition(Train_Raw_data$classe, p=0.7, list = FALSE)
+TrainData <- Train_Raw_data[intrain, ]
+TestData <- Train_Raw_data[-intrain, ]
+dim(TrainData)
+dim(TestData)
+```
+
+* Remove Near Zero values and Data Clean for Train and Test Data set
+
+```{r,cache=TRUE,echo=TRUE}
+Near_z_var <- nearZeroVar(TrainData)
+TrainData <- TrainData [,-Near_z_var]
+TestData <- TestData[,-Near_z_var]
+dim(TrainData)
+dim(TestData)
+
+rm_NA <- sapply(TrainData, function(x) mean(is.na(x))) > 0.95
+TrainData <- TrainData[,rm_NA==FALSE]
+TestData <- TestData[, rm_NA==FALSE]
+dim(TrainData)
+dim(TestData)
+```
+Removing first 5 columns which are not required.
+```{r,cache=TRUE,echo=TRUE, results='hide'}
+TrainData <- TrainData[,-(1:5)]
+TestData <- TestData[,-(1:5)]
+dim(TrainData)
+dim(TestData)
+```
+
+## Prediction Model
+####Random Forests 
+3 Fold cross validation
+```{r,cache=TRUE,echo=TRUE}
+set.seed(101)
+RF_ctrl <- trainControl(method = "cv", number = 3, verboseIter = FALSE)
+RF_model <- train(classe ~ ., data = TrainData, method="rf", trControl= RF_ctrl)
+RF_model$finalModel
+
+predictRF <- predict(RF_model, newdata = TestData)
+confMatRF <- confusionMatrix(predictRF, TestData$classe)
+confMatRF
+```
+
+####Decision Tree 
+```{r,cache=TRUE,echo=TRUE}
+set.seed(101)
+DTModle <- rpart(classe ~ ., data=TrainData, method="class")
+fancyRpartPlot(DTModle)
+
+predictDT <- predict(DTModle,newdata=TestData, type="class")
+confMatDT <- confusionMatrix(predictDT,TestData$classe)
+confMatDT
+```
+
+#### Generalized Boosted Model
+
+```{r,cache=TRUE,echo=TRUE}
+set.seed(301)
+ctrlGM <- trainControl(method = "repeatedcv", number = 5, repeats = 1)
+GBModel <- train(classe ~ ., data=TrainData, method = "gbm", trControl = ctrlGM, verbose = FALSE)
+GBModel$finalModel
+
+predictGBM <- predict (GBModel, newdata=TestData)
+confMatGBM <- confusionMatrix(predictGBM, TestData$classe)
+confMatGBM
+```
+
+## Conclusion
+
+Random Forest is the best mentod for prediction as per Accuracy %. Predict 20 results from Test RAW data.
+```{r,cache=TRUE,echo=TRUE}
+PT <- predict(RF_model,newdata = Test_Raw_Data)
+PT
+```
+
